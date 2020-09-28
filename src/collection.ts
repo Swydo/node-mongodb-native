@@ -86,6 +86,7 @@ import type { PkFactory } from './mongo_client';
 import type { Topology } from './sdam/topology';
 import type { Logger, LoggerOptions } from './logger';
 import type { OperationParent } from './operations/command';
+import { FindCursor } from './cursor/find_cursor';
 
 /** @public */
 export interface Collection {
@@ -697,6 +698,25 @@ export class Collection implements OperationParent {
       new FindOperation(this, this.s.namespace, filter, options),
       options
     );
+  }
+
+  /**
+   * Creates a cursor for a query that can be used to iterate over results from MongoDB
+   *
+   * @param filter - The query predicate. If unspecified, then all documents in the collection will match the predicate
+   */
+  findWithFindCursor(): FindCursor;
+  findWithFindCursor(filter: Document): FindCursor;
+  findWithFindCursor(filter: Document, options: FindOptions): FindCursor;
+  findWithFindCursor(filter?: Document, options?: FindOptions): FindCursor {
+    if (arguments.length > 2) {
+      throw new TypeError('Third parameter to `collection.find()` must be undefined');
+    }
+    if (typeof options === 'function') {
+      throw new TypeError('`options` parameter must not be function');
+    }
+
+    return new FindCursor(this.s.topology, this.s.namespace, filter, options);
   }
 
   /**

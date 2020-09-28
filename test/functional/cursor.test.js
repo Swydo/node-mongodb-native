@@ -18,6 +18,45 @@ describe('Cursor', function () {
     ]);
   });
 
+  it.only('should support the new FindCursor', function (done) {
+    const configuration = this.configuration;
+    const client = configuration.newClient(configuration.writeConcernMax(), { poolSize: 1 });
+    client.connect((err, client) => {
+      expect(err).to.not.exist;
+      this.defer(() => client.close());
+
+      const docs = [{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }, { a: 6 }];
+      const coll = client.db(configuration.db).collection('find_cursor');
+      coll.insertMany(docs, configuration.writeConcernMax(), err => {
+        expect(err).to.not.exist;
+
+        const cursor = coll.findWithFindCursor({}, { batchSize: 2 });
+        this.defer(() => cursor.close());
+        cursor.toArray((err, docs) => {
+          expect(err).to.not.exist;
+          expect(docs).to.have.length(6);
+          done();
+        });
+
+        // cursor.next((err, doc) => {
+        //   expect(err).to.not.exist;
+        //   expect(doc).to.matchMongoSpec({ a: 1 });
+
+        //   cursor.next((err, doc) => {
+        //     expect(err).to.not.exist;
+        //     expect(doc).to.matchMongoSpec({ a: 2 });
+
+        //     cursor.next((err, doc) => {
+        //       expect(err).to.not.exist;
+        //       expect(doc).to.matchMongoSpec({ a: 3 });
+        //       done();
+        //     });
+        //   });
+        // });
+      });
+    });
+  });
+
   it('cursorShouldBeAbleToResetOnToArrayRunningQueryAgain', {
     // Add a tag that our runner can trigger on
     // in this case we are setting that node needs to be higher than 0.10.X to run
