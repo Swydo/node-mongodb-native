@@ -2,6 +2,8 @@
 const test = require('./shared').assert;
 const setupDatabase = require('./shared').setupDatabase;
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const expect = require('chai').expect;
 const Long = require('bson').Long;
 const sinon = require('sinon');
@@ -2216,7 +2218,9 @@ describe('Cursor', function() {
     // Add a tag that our runner can trigger on
     // in this case we are setting that node needs to be higher than 0.10.X to run
     metadata: {
-      requires: { topology: ['single', 'replicaset', 'sharded', 'ssl', 'heap', 'wiredtiger'] }
+      requires: {
+        os: '!win32' // NODE-2943: timeout on windows
+      }
     },
 
     // The actual test we wish to run
@@ -2239,8 +2243,8 @@ describe('Cursor', function() {
           collection.insert(docs, configuration.writeConcernMax(), function(err) {
             test.equal(null, err);
 
-            var filename = '/tmp/_nodemongodbnative_stream_out.txt',
-              out = fs.createWriteStream(filename);
+            const filename = path.join(os.tmpdir(), '_nodemongodbnative_stream_out.txt');
+            const out = fs.createWriteStream(filename);
 
             // hack so we don't need to create a stream filter just to
             // stringify the objects (otherwise the created file would
@@ -2282,12 +2286,13 @@ describe('Cursor', function() {
   /**
    * @ignore
    */
-  it('shouldCloseDeadTailableCursors', {
+  it('should close dead tailable cursors', {
     // Add a tag that our runner can trigger on
     // in this case we are setting that node needs to be higher than 0.10.X to run
     metadata: {
       requires: { topology: ['single', 'replicaset', 'sharded', 'ssl', 'heap', 'wiredtiger'] },
-      sessions: { skipLeakTests: true }
+      sessions: { skipLeakTests: true },
+      os: '!win32' // NODE-2943: timeout on windows
     },
 
     // The actual test we wish to run
@@ -4659,6 +4664,32 @@ describe('Cursor', function() {
               expect(mappedDocs.map(x => x.mapped)).to.eql(docs.map(x => ({ name: x.name })));
               done();
             });
+        });
+      });
+    });
+  });
+
+  describe('#clone', function() {
+    it('removes the existing session from the cloned cursor', function(done) {
+      const configuration = this.configuration;
+      const client = configuration.newClient();
+      client.connect(error => {
+        expect(error).to.not.exist;
+        this.defer(() => client.close());
+
+        const docs = [{ name: 'test1' }, { name: 'test2' }];
+        const coll = client.db(configuration.db).collection('cursor_session_mapping');
+        coll.insertMany(docs, err => {
+          expect(err).to.not.exist;
+          const cursor = coll.find({}, { batchSize: 1 });
+          cursor.next((er, doc) => {
+            expect(er).to.not.exist;
+            expect(doc).to.exist;
+            const clonedCursor = cursor.clone();
+            expect(clonedCursor.cursorState.session).to.not.exist;
+            cursor.close();
+            done();
+          });
         });
       });
     });

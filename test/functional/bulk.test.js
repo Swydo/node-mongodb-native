@@ -760,7 +760,7 @@ describe('Bulk', function() {
           batch.insert({ b: 1 });
 
           // Execute the operations
-          batch.execute(self.configuration.writeConcernMax(), function(err, result) {
+          batch.execute(self.configuration.writeConcernMax().writeConcern, function(err, result) {
             expect(err).to.exist;
             expect(result).to.not.exist;
 
@@ -812,7 +812,7 @@ describe('Bulk', function() {
           batch.insert({ a: 1 });
 
           // Execute the operations
-          batch.execute(configuration.writeConcernMax(), (err, result) => {
+          batch.execute(configuration.writeConcernMax().writeConcern, (err, result) => {
             expect(err).to.exist;
             expect(result).to.not.exist;
 
@@ -872,7 +872,7 @@ describe('Bulk', function() {
             batch.insert({ b: 1 });
 
             // Execute the operations
-            batch.execute(self.configuration.writeConcernMax(), function(err, result) {
+            batch.execute(self.configuration.writeConcernMax().writeConcern, function(err, result) {
               expect(err).to.exist;
               expect(result).to.not.exist;
 
@@ -928,7 +928,7 @@ describe('Bulk', function() {
           .updateOne({ $set: { b: 2 } });
 
         // Execute the operations
-        batch.execute(self.configuration.writeConcernMax(), function(err, result) {
+        batch.execute(self.configuration.writeConcernMax().writeConcern, function(err, result) {
           // Check state of result
           test.equal(1, result.nUpserted);
           test.equal(0, result.nInserted);
@@ -1661,5 +1661,70 @@ describe('Bulk', function() {
             .to.equal(39)
         );
     });
+  });
+
+  it('should enforce no atomic operators', function() {
+    const client = this.configuration.newClient();
+    return client
+      .connect()
+      .then(() => {
+        const collection = client.db().collection('noAtomicOp');
+        return collection
+          .drop()
+          .catch(ignoreNsNotFound)
+          .then(() => collection);
+      })
+      .then(collection => {
+        return collection.insertMany([{ a: 1 }, { a: 1 }, { a: 1 }]).then(() => collection);
+      })
+      .then(collection => {
+        try {
+          return collection.replaceOne({ a: 1 }, { $atomic: 1 });
+        } catch (err) {
+          expect(err).to.be.instanceOf(
+            TypeError,
+            'Replacement document must not use atomic operators'
+          );
+        }
+      })
+      .then(
+        () => client.close(),
+        () => client.close()
+      );
+  });
+
+  it('should respect toBSON conversion when checking for atomic operators', function() {
+    const client = this.configuration.newClient();
+    return client
+      .connect()
+      .then(() => {
+        const collection = client.db().collection('noAtomicOp');
+        return collection
+          .drop()
+          .catch(ignoreNsNotFound)
+          .then(() => collection);
+      })
+      .then(collection => {
+        return collection.insertMany([{ a: 1 }, { a: 1 }, { a: 1 }]).then(() => collection);
+      })
+      .then(collection => {
+        try {
+          return collection.replaceOne(
+            { a: 1 },
+            {
+              $atomic: 1,
+              toBSON() {
+                return { atomic: this.$atomic };
+              }
+            }
+          );
+        } catch (err) {
+          expect.fail(); // shouldn't throw any error
+        }
+      })
+      .then(
+        () => client.close(),
+        () => client.close()
+      );
   });
 });

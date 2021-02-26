@@ -11,7 +11,7 @@ command_type: system
 # Protect ourself against rogue test case, or curl gone wild, that runs forever
 # Good rule of thumb: the averageish length a task takes, times 5
 # That roughly accounts for variable system performance for various buildvariants
-exec_timeout_secs: 900
+exec_timeout_secs: 1200
 
 # What to do when evergreen hits the timeout (`post:` tasks are run automatically)
 timeout:
@@ -26,10 +26,7 @@ functions:
     - command: git.get_project
       params:
         directory: "src"
-    # Applies the submitted patch, if any
-    # Deprecated. Should be removed. But still needed for certain agents (ZAP)
-    - command: git.apply_patch
-    # Make an evergreen exapanstion file with dynamic values
+    # Make an evergreen expansion file with dynamic values
     - command: shell.exec
       params:
         working_dir: "src"
@@ -46,6 +43,14 @@ functions:
            export MONGO_ORCHESTRATION_HOME="$DRIVERS_TOOLS/.evergreen/orchestration"
            export MONGODB_BINARIES="$DRIVERS_TOOLS/mongodb/bin"
            export UPLOAD_BUCKET="${project}"
+
+           # fix paths on windows
+           if [ "Windows_NT" = "$OS" ]; then
+             export DRIVERS_TOOLS=$(cygpath -m -a $DRIVERS_TOOLS)
+             export MONGO_ORCHESTRATION_HOME=$(cygpath -m -a $MONGO_ORCHESTRATION_HOME)
+             export MONGODB_BINARIES=$(cygpath -m -a $MONGODB_BINARIES)
+             export PROJECT_DIRECTORY=$(cygpath -m -a $PROJECT_DIRECTORY)
+           fi
 
            cat <<EOT > expansion.yml
            CURRENT_VERSION: "$CURRENT_VERSION"
@@ -80,13 +85,7 @@ functions:
       params:
         script: |
           ${PREPARE_SHELL}
-          rm -rf $DRIVERS_TOOLS
-          if [ "${project}" = "drivers-tools" ]; then
-            # If this was a patch build, doing a fresh clone would not actually test the patch
-            cp -R ${PROJECT_DIRECTORY}/ $DRIVERS_TOOLS
-          else
-            git clone git://github.com/mongodb-labs/drivers-evergreen-tools.git $DRIVERS_TOOLS
-          fi
+          git clone git://github.com/mongodb-labs/drivers-evergreen-tools.git $DRIVERS_TOOLS
           echo "{ \"releases\": { \"default\": \"$MONGODB_BINARIES\" }}" > $MONGO_ORCHESTRATION_HOME/orchestration.config
 
   "bootstrap mongo-orchestration":
@@ -113,14 +112,14 @@ functions:
           if [ -n "${CLIENT_ENCRYPTION}" ]; then
             cat <<EOT > prepare_client_encryption.sh
             export CLIENT_ENCRYPTION=${CLIENT_ENCRYPTION}
-            export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-            export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+            export CSFLE_KMS_PROVIDERS='${CSFLE_KMS_PROVIDERS}'
           EOT
           fi
     - command: shell.exec
       type: test
       params:
         working_dir: "src"
+        timeout_secs: 60
         script: |
           ${PREPARE_SHELL}
 
@@ -132,7 +131,8 @@ functions:
           fi
 
           AUTH=${AUTH} SSL=${SSL} UNIFIED=${UNIFIED} MONGODB_URI="${MONGODB_URI}" \
-          bash ${PROJECT_DIRECTORY}/.evergreen/run-tests.sh
+          NODE_VERSION=${NODE_VERSION} SKIP_DEPS=1 NO_EXIT=1 \
+            bash ${PROJECT_DIRECTORY}/.evergreen/run-tests.sh
 
   "run checks":
     - command: shell.exec
@@ -146,6 +146,7 @@ functions:
   "cleanup":
     - command: shell.exec
       params:
+        silent: true
         script: |
           ${PREPARE_SHELL}
           rm -rf $DRIVERS_TOOLS || true
@@ -153,27 +154,30 @@ functions:
   "fix absolute paths":
     - command: shell.exec
       params:
+        silent: true
         script: |
           ${PREPARE_SHELL}
           for filename in $(find ${DRIVERS_TOOLS} -name \*.json); do
             perl -p -i -e "s|ABSOLUTE_PATH_REPLACEMENT_TOKEN|${DRIVERS_TOOLS}|g" $filename
           done
 
-  # "windows fix":
-  #   - command: shell.exec
-  #     params:
-  #       script: |
-  #         ${PREPARE_SHELL}
-  #         for i in $(find ${DRIVERS_TOOLS}/.evergreen ${PROJECT_DIRECTORY}/.evergreen -name \*.sh); do
-  #           cat $i | tr -d '\r' > $i.new
-  #           mv $i.new $i
-  #         done
-  #         # Copy client certificate because symlinks do not work on Windows.
-  #         cp ${DRIVERS_TOOLS}/.evergreen/x509gen/client.pem ${MONGO_ORCHESTRATION_HOME}/lib/client.pem
+  "windows fix":
+    - command: shell.exec
+      params:
+        silent: true
+        script: |
+          ${PREPARE_SHELL}
+          # for i in $(find ${DRIVERS_TOOLS}/.evergreen ${PROJECT_DIRECTORY}/.evergreen -name \*.sh); do
+          #   cat $i | tr -d '\r' > $i.new
+          #   mv $i.new $i
+          # done
+          # Copy client certificate because symlinks do not work on Windows.
+          cp ${DRIVERS_TOOLS}/.evergreen/x509gen/client.pem ${MONGO_ORCHESTRATION_HOME}/lib/client.pem
 
   "make files executable":
     - command: shell.exec
       params:
+        silent: true
         script: |
           ${PREPARE_SHELL}
           for i in $(find ${DRIVERS_TOOLS}/.evergreen ${PROJECT_DIRECTORY}/.evergreen -name \*.sh); do
@@ -187,7 +191,11 @@ functions:
         working_dir: "src"
         script: |
           ${PREPARE_SHELL}
-          NODE_LTS_NAME=${NODE_LTS_NAME} bash ${PROJECT_DIRECTORY}/.evergreen/install-dependencies.sh
+          NODE_LTS_NAME=${NODE_LTS_NAME} MSVS_VERSION=${MSVS_VERSION} \
+            bash ${PROJECT_DIRECTORY}/.evergreen/install-dependencies.sh
+    - command: expansions.update
+      params:
+        file: src/deps-expansion.yml          
 
   "run atlas tests":
     - command: shell.exec
@@ -230,7 +238,7 @@ functions:
           MONGODB_URI='${plain_auth_mongodb_uri}' NODE_LTS_NAME='${NODE_LTS_NAME}' \
           bash ${PROJECT_DIRECTORY}/.evergreen/run-ldap-tests.sh
 
-  "run tls tests":  
+  "run tls tests":
     - command: shell.exec
       type: test
       params:
@@ -266,7 +274,7 @@ functions:
           }
           EOF
 
-  run aws auth test with regular aws credentials:
+  "run aws auth test with regular aws credentials":
     - command: shell.exec
       type: test
       params:
@@ -274,6 +282,7 @@ functions:
         script: |
           ${PREPARE_SHELL}
           cd ${DRIVERS_TOOLS}/.evergreen/auth_aws
+          . ./activate_venv.sh
           ${MONGODB_BINARIES}/mongo aws_e2e_regular_aws.js
     - command: shell.exec
       type: test
@@ -295,7 +304,7 @@ functions:
           ${PREPARE_SHELL}
           ${PROJECT_DIRECTORY}/.evergreen/run-mongodb-aws-test.sh
 
-  run aws auth test with assume role credentials:
+  "run aws auth test with assume role credentials":
     - command: shell.exec
       type: test
       params:
@@ -303,6 +312,7 @@ functions:
         script: |
           ${PREPARE_SHELL}
           cd ${DRIVERS_TOOLS}/.evergreen/auth_aws
+          . ./activate_venv.sh
           ${MONGODB_BINARIES}/mongo aws_e2e_assume_role.js
     - command: shell.exec
       type: test
@@ -328,7 +338,7 @@ functions:
           ${PREPARE_SHELL}
           ${PROJECT_DIRECTORY}/.evergreen/run-mongodb-aws-test.sh
 
-  run aws auth test with aws EC2 credentials:
+  "run aws auth test with aws EC2 credentials":
     - command: shell.exec
       type: test
       params:
@@ -336,6 +346,7 @@ functions:
         script: |
           ${PREPARE_SHELL}
           cd ${DRIVERS_TOOLS}/.evergreen/auth_aws
+          . ./activate_venv.sh
           ${MONGODB_BINARIES}/mongo aws_e2e_ec2.js
     - command: shell.exec
       type: test
@@ -345,7 +356,7 @@ functions:
           ${PREPARE_SHELL}
           ${PROJECT_DIRECTORY}/.evergreen/run-mongodb-aws-test.sh
 
-  run aws auth test with aws credentials as environment variables:
+  "run aws auth test with aws credentials as environment variables":
     - command: shell.exec
       type: test
       params:
@@ -365,7 +376,7 @@ functions:
           ${PREPARE_SHELL}
           ${PROJECT_DIRECTORY}/.evergreen/run-mongodb-aws-test.sh
 
-  run aws auth test with aws credentials and session token as environment variables:
+  "run aws auth test with aws credentials and session token as environment variables":
     - command: shell.exec
       type: test
       params:
@@ -386,7 +397,7 @@ functions:
           ${PREPARE_SHELL}
           ${PROJECT_DIRECTORY}/.evergreen/run-mongodb-aws-test.sh
 
-  run aws ECS auth test:
+  "run aws ECS auth test":
     - command: shell.exec
       type: test
       params:
@@ -411,9 +422,10 @@ functions:
           EOF
 
           cat setup.js
+          . ./activate_venv.sh
           mongo --nodb setup.js aws_e2e_ecs.js
 
-  run-ocsp-test:
+  "run-ocsp-test":
     - command: shell.exec
       type: test
       params:
@@ -424,9 +436,9 @@ functions:
           UNIFIED=${UNIFIED} \
           CA_FILE="$DRIVERS_TOOLS/.evergreen/ocsp/rsa/ca.pem" \
           OCSP_TLS_SHOULD_SUCCEED="${OCSP_TLS_SHOULD_SUCCEED}" \
-          sh ${PROJECT_DIRECTORY}/.evergreen/run-ocsp-tests.sh
+          bash ${PROJECT_DIRECTORY}/.evergreen/run-ocsp-tests.sh
 
-  run-valid-ocsp-server:
+  "run-valid-ocsp-server":
     - command: shell.exec
       params:
         script: |
@@ -444,7 +456,7 @@ functions:
             --ocsp_responder_key rsa/ca.key \
             -p 8100 -v
 
-  run-revoked-ocsp-server:
+  "run-revoked-ocsp-server":
     - command: shell.exec
       params:
         script: |
@@ -464,13 +476,20 @@ functions:
             -v \
             --fault revoked
 
-
+  "upload test results":
+    - command: attach.xunit_results
+      params:
+        file: src/xunit.xml
 pre:
   - func: "fetch source"
   - func: "prepare resources"
-  # - func: "windows fix"
+  - func: "windows fix"
   - func: "fix absolute paths"
   - func: "make files executable"
 
 post:
+  - func: "upload test results"
   - func: "cleanup"
+
+ignore:
+  - '*.md'

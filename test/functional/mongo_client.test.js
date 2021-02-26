@@ -368,7 +368,7 @@ describe('MongoClient', function() {
 
         for (var i = 0; i < connections.length; i++) {
           test.equal(10000, connections[i].connectionTimeout);
-          test.equal(360000, connections[i].socketTimeout);
+          expect(connections[i].socketTimeout).to.equal(0);
         }
 
         client.close();
@@ -487,7 +487,7 @@ describe('MongoClient', function() {
   });
 
   it('should correctly connect to mongodb using domain socket', {
-    metadata: { requires: { topology: ['single'] } },
+    metadata: { requires: { topology: ['single'], os: '!win32' } },
 
     // The actual test we wish to run
     test: function(done) {
@@ -518,7 +518,10 @@ describe('MongoClient', function() {
         {},
         {
           keepAlive: true,
-          keepAliveInitialDelay: 100
+          keepAliveInitialDelay: 100,
+          // keepAliveInitialDelay is clamped to half the size of socketTimeout
+          // if socketTimeout is less than keepAliveInitialDelay
+          socketTimeout: 101
         }
       );
 
