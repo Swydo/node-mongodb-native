@@ -680,7 +680,7 @@ export class CryptoConnection extends Connection {
 }
 
 function hasSessionSupport(conn: Connection) {
-  return conn.description.logicalSessionTimeoutMinutes != null;
+  return true;
 }
 
 function supportsOpMsg(conn: Connection) {

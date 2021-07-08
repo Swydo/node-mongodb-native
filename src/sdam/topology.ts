@@ -610,7 +610,7 @@ export class Topology extends TypedEventEmitter<TopologyEvents> {
    * @returns Whether sessions are supported on the current topology
    */
   hasSessionSupport(): boolean {
-    return this.description.logicalSessionTimeoutMinutes != null;
+    return true;
   }
 
   /** Start a logical session */
