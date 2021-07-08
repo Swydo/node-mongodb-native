@@ -1,7 +1,7 @@
 {
   "root": true,
   "parserOptions": {
-    "ecmaVersion": 2017
+    "ecmaVersion": 2015
   },
   "plugins": [
     "prettier",
@@ -21,7 +21,7 @@
     "es/no-destructuring": "error",
     "es/no-rest-spread-properties": "error",
     "es/no-spread-elements": "error",
-    "no-console": "off",
+    "no-console": "error",
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     "strict": ["error", "global"]
   },

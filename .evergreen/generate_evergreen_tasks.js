@@ -9,7 +9,7 @@ const MONGODB_VERSIONS = ['latest', '4.4', '4.2', '4.0', '3.6', '3.4', '3.2', '3
 const AWS_AUTH_VERSIONS = ['latest', '4.4'];
 const OCSP_VERSIONS = ['latest', '4.4'];
 const TLS_VERSIONS = ['latest', '4.2']; // also test on 4.2 because 4.4+ currently skipped on windows
-const NODE_VERSIONS = ['erbium', 'dubnium', 'carbon', 'boron', 'argon'];
+const NODE_VERSIONS = ['fermium', 'erbium', 'dubnium', 'carbon', 'boron', 'argon'];
 const TOPOLOGIES = ['server', 'replica_set', 'sharded_cluster'].concat([
   'server-unified',
   'replica_set-unified',
@@ -296,10 +296,20 @@ OCSP_VERSIONS.forEach(VERSION => {
 const AWS_AUTH_TASKS = [];
 
 AWS_AUTH_VERSIONS.forEach(VERSION => {
-  const name = `aws-${VERSION}-auth-test`;
-  AWS_AUTH_TASKS.push(name);
-  TASKS.push({
-    name: name,
+  const name = (ex) => `aws-${VERSION}-auth-test-${ex.split(' ').join('-')}`;
+  // AWS_AUTH_TASKS.push(name);
+
+  const aws_funcs = [
+    { func: 'run aws auth test with regular aws credentials' },
+    { func: 'run aws auth test with assume role credentials' },
+    { func: 'run aws auth test with aws EC2 credentials' },
+    { func: 'run aws auth test with aws credentials as environment variables' },
+    { func: 'run aws auth test with aws credentials and session token as environment variables' },
+    { func: 'run aws ECS auth test' }
+  ];
+
+  const aws_tasks = aws_funcs.map(fn => ({
+    name: name(fn.func),
     commands: [
       { func: 'install dependencies' },
       {
@@ -312,14 +322,13 @@ AWS_AUTH_VERSIONS.forEach(VERSION => {
         }
       },
       { func: 'add aws auth variables to file' },
-      { func: 'run aws auth test with regular aws credentials' },
-      { func: 'run aws auth test with assume role credentials' },
-      { func: 'run aws auth test with aws EC2 credentials' },
-      { func: 'run aws auth test with aws credentials as environment variables' },
-      { func: 'run aws auth test with aws credentials and session token as environment variables' },
-      { func: 'run aws ECS auth test' }
+      { func: 'setup aws env' },
+      fn
     ]
-  });
+  }))
+
+  TASKS.push(...aws_tasks);
+  AWS_AUTH_TASKS.push(...aws_tasks.map(t => t.name))
 });
 
 const BUILD_VARIANTS = [];
@@ -410,11 +419,37 @@ SINGLETON_TASKS.push({
   ]
 });
 
+SINGLETON_TASKS.push({
+  name: 'run-custom-csfle-tests',
+  tags: ['run-custom-csfle-tests'],
+  commands: [
+    {
+      func: 'install dependencies',
+      vars: {
+        NODE_LTS_NAME: 'erbium',
+      },
+    },
+    {
+      func: 'bootstrap mongo-orchestration',
+      vars: {
+        VERSION: '4.4',
+        TOPOLOGY: 'server'
+      }
+    },
+    { func: 'run custom csfle tests' }
+  ]
+});
+
 BUILD_VARIANTS.push({
   name: 'lint',
   display_name: 'lint',
   run_on: 'rhel70',
   tasks: ['run-checks']
+}, {
+  name: 'ubuntu1804-custom-csfle-tests',
+  display_name: 'Custom FLE Version Test',
+  run_on: 'ubuntu1804-test',
+  tasks: ['run-custom-csfle-tests']
 });
 
 // special case for MONGODB-AWS authentication

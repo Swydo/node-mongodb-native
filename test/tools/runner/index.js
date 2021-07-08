@@ -1,5 +1,9 @@
 'use strict';
 
+// shims
+require('array-includes/auto');
+require('object.entries/auto');
+
 const path = require('path');
 const fs = require('fs');
 const MongoClient = require('../../..').MongoClient;
@@ -105,9 +109,6 @@ require('mocha-sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 chai.use(require('../../functional/spec-runner/matcher').default);
-chai.config.includeStack = true;
-chai.config.showDiff = true;
-chai.config.truncateThreshold = 0;
 
 // install signal handlers for printing open/active handles
 function dumpAndExit() {

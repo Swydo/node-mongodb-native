@@ -2657,7 +2657,7 @@ describe('Operation Examples', function() {
                 ],
                 { w: 1, keepGoing: true },
                 function(err, result) {
-                  test.equal(result, null);
+                  expect(result).to.not.exist;
                   test.ok(err);
                   test.ok(err.result);
 
@@ -3115,7 +3115,7 @@ describe('Operation Examples', function() {
 
               // Attemp to rename the first collection to the second one, this will fail
               collection1.rename('test_rename_collection2', function(err, collection) {
-                test.equal(null, collection);
+                expect(collection).to.not.exist;
                 test.ok(err instanceof Error);
                 test.ok(err.message.length > 0);
 
@@ -3688,10 +3688,9 @@ describe('Operation Examples', function() {
         // REMOVE-LINE done();
         // REMOVE-LINE var db = client.db(configuration.db);
         // BEGIN
-        var db = client.db(configuration.db);
         test.equal(null, err);
 
-        db.on('close', function() {
+        client.on('close', function() {
           done();
         });
 
@@ -8747,7 +8746,7 @@ describe('Operation Examples', function() {
           .upsert()
           .updateOne({ $set: { b: 2 } });
         batch.insert({ a: 3 });
-        batch.find({ a: 3 }).remove({ a: 3 });
+        batch.find({ a: 3 }).delete({ a: 3 });
 
         // Execute the operations
         batch.execute(function(err, result) {
@@ -8815,7 +8814,7 @@ describe('Operation Examples', function() {
           .upsert()
           .updateOne({ $set: { b: 2 } });
         batch.insert({ a: 3 });
-        batch.find({ a: 3 }).remove({ a: 3 });
+        batch.find({ a: 3 }).delete({ a: 3 });
 
         // Execute the operations
         batch.execute(function(err, result) {
@@ -9270,7 +9269,7 @@ describe('Operation Examples', function() {
             {
               projection: { b: 1, c: 1 },
               sort: { a: 1 },
-              returnOriginal: false,
+              returnDocument: 'after',
               upsert: true
             },
             function(err, r) {
@@ -9328,7 +9327,7 @@ describe('Operation Examples', function() {
             {
               projection: { b: 1, d: 1 },
               sort: { a: 1 },
-              returnOriginal: false,
+              returnDocument: 'after',
               upsert: true
             },
             function(err, r) {

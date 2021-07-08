@@ -363,7 +363,8 @@ describe('CRUD API', function() {
             db.collection('t2_5').bulkWrite(
               [
                 { insertOne: { a: 1 } },
-                { insertMany: [{ g: 1 }, { g: 2 }] },
+                { insertOne: { document: { g: 1 } } },
+                { insertOne: { document: { g: 2 } } },
                 { updateOne: { q: { a: 2 }, u: { $set: { a: 2 } }, upsert: true } },
                 { updateMany: { q: { a: 2 }, u: { $set: { a: 2 } }, upsert: true } },
                 { deleteOne: { q: { c: 1 } } },
@@ -444,7 +445,8 @@ describe('CRUD API', function() {
             db.collection('t2_7').bulkWrite(
               [
                 { insertOne: { a: 1 } },
-                { insertMany: [{ g: 1 }, { g: 2 }] },
+                { insertOne: { document: { g: 1 } } },
+                { insertOne: { document: { g: 2 } } },
                 { updateOne: { q: { a: 2 }, u: { $set: { a: 2 } }, upsert: true } },
                 { updateMany: { q: { a: 2 }, u: { $set: { a: 2 } }, upsert: true } },
                 { deleteOne: { q: { c: 1 } } },
@@ -764,7 +766,7 @@ describe('CRUD API', function() {
               {
                 projection: { b: 1, c: 1 },
                 sort: { a: 1 },
-                returnOriginal: false,
+                returnOriginal: false, // keeping the deprecated option for compatibility testing since returnDocument is covered in spec tests
                 upsert: true
               },
               function(err, r) {
@@ -793,7 +795,7 @@ describe('CRUD API', function() {
               {
                 projection: { b: 1, d: 1 },
                 sort: { a: 1 },
-                returnOriginal: false,
+                returnOriginal: false, // keeping the deprecated option for compatibility testing since returnDocument is covered in spec tests
                 upsert: true
               },
               function(err, r) {
